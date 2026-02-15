@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Enactus Mini Game-1 (Absolute Scoring)</title>
+    <title>Enactus Mini Game-1 (Absolute Ranking)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         :root {
@@ -66,7 +66,6 @@
             border-radius: 8px;
             text-align: center;
             background: #fff;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
         .team-input label {
@@ -105,19 +104,16 @@
             border: none;
             border-radius: 8px;
             font-size: 1rem;
-            transition: opacity 0.2s;
         }
 
         .btn-go { background: var(--success); color: white; }
         .btn-reset { background: var(--danger); color: white; }
-        button:active { opacity: 0.7; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
 
         .victory {
             display: none;
-            background: #d4edda;
-            border: 2px solid #c3e6cb;
-            color: #155724;
+            background: #d1ecf1;
+            border: 2px solid #bee5eb;
+            color: #0c5460;
             padding: 15px;
             text-align: center;
             margin-bottom: 20px;
@@ -127,7 +123,6 @@
         .table-wrapper {
             width: 100%;
             overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
             margin-top: 10px;
             border-radius: 8px;
             border: 1px solid #ddd;
@@ -136,21 +131,27 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 450px;
+            min-width: 600px;
         }
 
         th, td {
             border: 1px solid #eee;
             padding: 12px 8px;
             text-align: center;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
 
         th { background: #f8f9fa; color: var(--primary); }
-        .leader { background: #fff3cd; font-weight: bold; }
+        .leader { background: #fff9c4; font-weight: bold; }
 
-        .history-section { margin-top: 40px; }
-        h2 { font-size: 1.2rem; border-left: 4px solid var(--accent); padding-left: 10px; }
+        .rules-hint {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 10px;
+            background: #eee;
+            padding: 10px;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -163,7 +164,6 @@
         <div id="winMsg" class="victory">
             <h2 style="margin:0">Game Over!</h2>
             <p id="winnerLine" style="font-weight:bold; font-size:1.2rem;"></p>
-            <p>Tiebreaker: Most Least-Chosen options, then Team Name.</p>
         </div>
 
         <div class="input-grid" id="grid"></div>
@@ -174,24 +174,30 @@
         </div>
 
         <h2>Scoreboard</h2>
+        <div class="rules-hint">
+            <strong>Ranking Rules:</strong> 1. Total Score | 2. More 5s | 3. More 3s | 4. More 1s | 5. Reached final score in earliest round.
+        </div>
         <div class="table-wrapper">
-            <table id="scoresTable">
+            <table>
                 <thead>
                     <tr>
                         <th>Rank</th>
                         <th>Team</th>
                         <th>Score</th>
-                        <th>Least Chosen Count</th>
+                        <th>5s</th>
+                        <th>3s</th>
+                        <th>1s</th>
+                        <th>Finished In</th>
                     </tr>
                 </thead>
                 <tbody id="scoreBody"></tbody>
             </table>
         </div>
 
-        <div class="history-section">
-            <h2>Team Decision History</h2>
+        <div style="margin-top: 30px;">
+            <h2>Decision History</h2>
             <div class="table-wrapper">
-                <table id="histTable">
+                <table>
                     <thead><tr id="histHead"><th>Team</th></tr></thead>
                     <tbody id="histBody"></tbody>
                 </table>
@@ -203,11 +209,15 @@
         let round = 1;
         const MAX_ROUNDS = 6;
         let done = false;
+        
         let teams = Array.from({length: 8}, (_, i) => ({ 
             id: i+1, 
             name: "Team "+(i+1), 
             score: 0, 
-            leastCount: 0, 
+            count5: 0, 
+            count3: 0, 
+            count1: 0, 
+            history: [], 
             log: [] 
         }));
 
@@ -215,7 +225,11 @@
             const grid = document.getElementById('grid');
             grid.innerHTML = '';
             teams.forEach(t => {
-                grid.innerHTML += `<div class="team-input"><label>${t.name}</label><input id="t${t.id}" maxlength="1" placeholder="R/G/B" inputmode="text"></div>`;
+                grid.innerHTML += `
+                    <div class="team-input">
+                        <label>${t.name}</label>
+                        <input id="t${t.id}" maxlength="1" placeholder="R/G/B">
+                    </div>`;
             });
             updateUI();
         }
@@ -225,105 +239,100 @@
             let selections = {};
             let counts = { R: 0, G: 0, B: 0 }; 
 
-            // 1. Collect inputs
             for (let i = 1; i <= 8; i++) {
                 let val = document.getElementById('t'+i).value.toUpperCase().trim();
                 if (!['R','G','B'].includes(val)) {
-                    alert("Error: Team "+i+" must enter R, G, or B");
+                    alert("Team "+i+" must enter R, G, or B");
                     return;
                 }
                 selections[i] = val;
                 counts[val]++;
             }
 
-            // 2. Determine which option(s) was chosen the least for the tiebreaker
-            let activeEntries = Object.entries(counts).filter(([opt, count]) => count > 0);
-            let minVal = Math.min(...activeEntries.map(([opt, count]) => count));
-            let leastChosenList = activeEntries
-                .filter(([opt, count]) => count === minVal)
-                .map(([opt, count]) => opt);
-
-            // 3. Process Scoring (Directly based on counts)
             teams.forEach(t => {
                 let choice = selections[t.id];
                 let n = counts[choice];
                 let pts = 0;
 
-                // 5 pts for 1 person, 3 pts for 2 people, 1 pt for 3 people
-                if (n === 1) pts = 5;
-                else if (n === 2) pts = 3;
-                else if (n === 3) pts = 1;
-                else pts = 0;
-
-                t.score += pts;
+                if (n === 1) { pts = 5; t.count5++; }
+                else if (n === 2) { pts = 3; t.count3++; }
+                else if (n === 3) { pts = 1; t.count1++; }
                 
-                // Tiebreaker check: did they pick the rarest option this round?
-                if (leastChosenList.includes(choice)) {
-                    t.leastCount++;
-                }
-
+                t.score += pts;
+                t.history.push(t.score); 
                 t.log.push({ choice, pts });
             });
 
             updateUI();
-            
+
             if (round >= MAX_ROUNDS) {
                 endGame();
             } else {
                 round++;
                 document.getElementById('roundDisp').innerText = round;
-                // Clear inputs for next round
                 teams.forEach(t => document.getElementById('t'+t.id).value = '');
             }
         }
 
-        function updateUI() {
-            // Ranking logic: Score -> LeastChosenCount -> Lower Team ID (Name)
-            let sorted = [...teams].sort((a,b) => {
+        function getFirstRoundAtScore(team) {
+            // Find the index of the first time their current total score appears in history
+            // index 0 = Round 1, so we add 1
+            const firstIdx = team.history.indexOf(team.score);
+            return firstIdx === -1 ? round : firstIdx + 1;
+        }
+
+        function getRankings() {
+            return [...teams].sort((a, b) => {
                 if (b.score !== a.score) return b.score - a.score;
-                if (b.leastCount !== a.leastCount) return b.leastCount - a.leastCount;
+                if (b.count5 !== a.count5) return b.count5 - a.count5;
+                if (b.count3 !== a.count3) return b.count3 - a.count3;
+                if (b.count1 !== a.count1) return b.count1 - a.count1;
+                
+                // Final Tiebreaker: Earliest round to reach current total
+                let roundA = getFirstRoundAtScore(a);
+                let roundB = getFirstRoundAtScore(b);
+                if (roundA !== roundB) return roundA - roundB; // Lower round is better
+                
                 return a.id - b.id; 
             });
+        }
 
+        function updateUI() {
+            const sorted = getRankings();
             const sBody = document.getElementById('scoreBody');
+            
             sBody.innerHTML = sorted.map((t, i) => `
                 <tr class="${i === 0 && t.score > 0 ? 'leader' : ''}">
                     <td>${i+1}</td>
-                    <td>${t.name}</td>
+                    <td><strong>${t.name}</strong></td>
                     <td>${t.score}</td>
-                    <td>${t.leastCount}</td>
+                    <td>${t.count5}</td>
+                    <td>${t.count3}</td>
+                    <td>${t.count1}</td>
+                    <td>R${getFirstRoundAtScore(t)}</td>
                 </tr>`).join('');
 
             const hHead = document.getElementById('histHead');
-            while (hHead.cells.length <= round) {
-                let th = document.createElement('th');
-                th.innerText = "R" + (hHead.cells.length);
-                hHead.appendChild(th);
-            }
+            hHead.innerHTML = '<th>Team</th>' + Array.from({length: round}, (_, i) => `<th>R${i+1}</th>`).join('');
 
             const hBody = document.getElementById('histBody');
-            hBody.innerHTML = teams.map(t => `<tr>
-                <td><strong>${t.name}</strong></td>
-                ${t.log.map(l => `<td>${l.choice} (${l.pts})</td>`).join('')}
-            </tr>`).join('');
+            hBody.innerHTML = teams.map(t => `
+                <tr>
+                    <td><strong>${t.name}</strong></td>
+                    ${t.log.map(l => `<td>${l.choice} (${l.pts})</td>`).join('')}
+                </tr>`).join('');
         }
 
         function endGame() {
             done = true;
             document.getElementById('winMsg').style.display = 'block';
             document.getElementById('subBtn').disabled = true;
-            
-            let sorted = [...teams].sort((a,b) => {
-                if (b.score !== a.score) return b.score - a.score;
-                if (b.leastCount !== a.leastCount) return b.leastCount - a.leastCount;
-                return a.id - b.id;
-            });
-            
+            const sorted = getRankings();
             document.getElementById('winnerLine').innerText = "Winner: " + sorted[0].name;
         }
 
         function reset() {
-            if (confirm("Reset game? All scores will be lost.")) location.reload();
+            if (confirm("Reset game?")) location.reload();
         }
 
         setup();
