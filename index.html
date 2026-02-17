@@ -56,7 +56,7 @@
         }
 
         @media (min-width: 600px) {
-            .input-grid { grid-template-columns: repeat(4, 1fr); }
+            .input-grid { grid-template-columns: repeat(3, 1fr); }
             .container { padding: 30px; }
         }
 
@@ -207,11 +207,11 @@
 
     <script>
         let round = 1;
-        // Updated constant from 6 to 8
         const MAX_ROUNDS = 8;
         let done = false;
         
-        let teams = Array.from({length: 8}, (_, i) => ({ 
+        // Changed team count from 8 to 6
+        let teams = Array.from({length: 6}, (_, i) => ({ 
             id: i+1, 
             name: "Team "+(i+1), 
             score: 0, 
@@ -240,8 +240,10 @@
             let selections = {};
             let counts = { R: 0, G: 0, B: 0 }; 
 
-            for (let i = 1; i <= 8; i++) {
-                let val = document.getElementById('t'+i).value.toUpperCase().trim();
+            // Changed loop limit to match 6 teams
+            for (let i = 1; i <= 6; i++) {
+                let inputElement = document.getElementById('t'+i);
+                let val = inputElement.value.toUpperCase().trim();
                 if (!['R','G','B'].includes(val)) {
                     alert("Team "+i+" must enter R, G, or B");
                     return;
@@ -255,6 +257,7 @@
                 let n = counts[choice];
                 let pts = 0;
 
+                // Scoring logic remains identical
                 if (n === 1) { pts = 5; t.count5++; }
                 else if (n === 2) { pts = 3; t.count3++; }
                 else if (n === 3) { pts = 1; t.count1++; }
